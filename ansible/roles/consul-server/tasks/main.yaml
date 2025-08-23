@@ -1,0 +1,83 @@
+- name: Install dependencies
+  apt:
+    name: [unzip, curl]
+    update_cache: yes
+
+- name: Download consul binary
+  get_url:
+    url: "https://releases.hashicorp.com/consul/{{ consul_version }}/consul_{{ consul_version }}_linux_amd64.zip"
+    dest: /tmp/consul.zip
+    mode: '0644'
+
+- name: Unzip consul
+  unarchive:
+    src: /tmp/consul.zip
+    dest: /usr/local/bin/
+    remote_src: yes
+
+- name: Create consul user
+  user:
+    name: consul
+    system: yes
+    shell: /bin/false
+
+- name: Create consul config dir
+  file:
+    path: /etc/consul.d
+    state: directory
+    owner: consul
+    group: consul
+    mode: '0750'
+
+- name: Create consul server config
+  copy:
+    dest: /etc/consul.d/server.json
+    content: |
+      {
+        "server": true,
+        "bootstrap_expect": 1,
+        "data_dir": "/opt/consul",
+        "client_addr": "0.0.0.0",
+        "ui": true
+      }
+    owner: consul
+    group: consul
+    mode: '0640'
+
+- name: Create systemd service for consul
+  copy:
+    dest: /etc/systemd/system/consul.service
+    content: |
+      [Unit]
+      Description=Consul Agent
+      Requires=network-online.target
+      After=network-online.target
+
+      [Service]
+      User=consul
+      Group=consul
+      ExecStart=/usr/local/bin/consul agent -config-dir=/etc/consul.d
+      ExecReload=/bin/kill -HUP $MAINPID
+      Restart=on-failure
+      LimitNOFILE=65536
+
+      [Install]
+      WantedBy=multi-user.target
+  notify: restart consul
+
+- name: Ensure consul directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: consul
+    group: consul
+    mode: '0750'
+  loop:
+    - /opt/consul
+    - /etc/consul.d
+
+- name: Enable and start consul
+  systemd:
+    name: consul
+    enabled: yes
+    state: started

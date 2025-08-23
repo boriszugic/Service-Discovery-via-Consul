@@ -1,0 +1,78 @@
+#cloud-config
+package_update: true
+
+packages:
+  - docker.io
+  - unzip
+  - curl
+  - python3
+  - python3-pip
+
+runcmd:
+  # Start Docker
+  - systemctl enable docker
+  - systemctl start docker
+
+  # Write Flask app to a file
+  - |
+    cat > /tmp/app.py <<EOF
+    from flask import Flask
+    app = Flask(__name__)
+
+    @app.route('/')
+    def hello():
+        return 'Hello from DevOps Starter Pack!'
+
+    if __name__ == "__main__":
+        app.run(host='0.0.0.0', port=5000)
+    EOF
+
+  # Run Flask inside Docker, mounting the app
+  - docker run -d --name flask-app -p 5000:5000 -v /tmp/app.py:/app/app.py python:3.12-slim bash -c "pip install flask && python /app/app.py"
+
+  # Download and install Consul
+  - curl -OL https://releases.hashicorp.com/consul/1.21.0/consul_1.21.0_linux_amd64.zip
+  - unzip consul_1.21.0_linux_amd64.zip -d /usr/local/bin/
+  - mkdir -p /etc/consul.d
+  - mkdir -p /opt/consul
+  - chown -R consul_demo:consul_demo /opt/consul
+  - chmod 750 /opt/consul
+
+  # Write Consul agent config
+  - |
+    cat > /etc/consul.d/agent.json <<EOF
+    {
+      "server": false,
+      "datacenter": "dc1",
+      "data_dir": "/opt/consul",
+      "retry_join": ["${consul_private_ip}"],
+      "bind_addr": "{{ GetInterfaceIP \"eth0\" }}",
+      "services": [{
+        "name": "flask-app",
+        "port": 5000
+      }]
+    }
+    EOF
+  
+  # Create systemd service for Consul agent
+  - |
+    cat > /etc/systemd/system/consul.service <<EOF
+    [Unit]
+    Description=Consul Agent
+    After=network.target
+
+    [Service]
+    User=consul_demo
+    Group=consul_demo
+    ExecStart=/usr/local/bin/consul agent -config-dir=/etc/consul.d
+    Restart=on-failure
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+
+  # Enable and start Consul agent
+  - systemctl daemon-reload
+  - systemctl enable consul
+  - systemctl start consul
+

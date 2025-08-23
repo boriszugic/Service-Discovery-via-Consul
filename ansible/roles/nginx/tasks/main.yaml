@@ -1,0 +1,79 @@
+- name: Install Nginx and dependencies
+  apt:
+    name:
+      - nginx
+      - unzip
+      - curl
+    state: present
+    update_cache: true
+
+- name: Remove default nginx site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+
+- name: Download consul-template
+  get_url:
+    url: "https://releases.hashicorp.com/consul-template/{{ consul_template_version }}/consul-template_{{ consul_template_version }}_linux_amd64.zip"
+    dest: /tmp/consul-template.zip
+
+- name: Unzip consul-template
+  unarchive:
+    src: /tmp/consul-template.zip
+    dest: /usr/local/bin/
+    remote_src: yes
+
+- name: Ensure consul-template is executable
+  file:
+    path: /usr/local/bin/consul-template
+    mode: '0755'
+
+- name: Create Nginx upstream template
+  copy:
+    dest: /etc/nginx/conf.d/upstreams.ctmpl
+    content: |
+      upstream backend {
+      {% raw %}
+      {{ range service "flask-app" }}
+          server {{ .Address }}:{{ .Port }};
+      {{ end }}
+      {% endraw %}
+      }
+
+      server {
+          listen 80;
+
+          location / {
+              proxy_pass http://backend;
+          }
+      }
+
+- name: Create consul-template systemd service
+  copy:
+    dest: /etc/systemd/system/consul-template.service
+    content: |
+      [Unit]
+      Description=consul-template for Nginx
+      After=network.target
+
+      [Service]
+      ExecStart=/usr/local/bin/consul-template \
+        -consul-addr={{ consul_address }} \
+        -template="/etc/nginx/conf.d/upstreams.ctmpl:/etc/nginx/conf.d/upstreams.conf:systemctl reload nginx"
+      Restart=always
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Reload systemd and start consul-template
+  systemd:
+    daemon_reload: true
+    name: consul-template
+    state: started
+    enabled: true
+
+- name: Ensure Nginx is running
+  service:
+    name: nginx
+    state: started
+    enabled: true

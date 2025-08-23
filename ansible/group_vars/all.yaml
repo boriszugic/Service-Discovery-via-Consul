@@ -1,0 +1,5 @@
+consul_version: "1.21.0"
+flask_app_port: 5000
+nginx_upstream_file: /etc/nginx/conf.d/upstreams.conf
+consul_address: "http://{{ hostvars[groups['consul'][0]].inventory_hostname }}:8500"
+consul_template_version: "0.41.1"

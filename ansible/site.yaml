@@ -1,0 +1,9 @@
+- hosts: consul
+  become: yes
+  roles:
+    - consul-server
+
+- hosts: nginx
+  become: yes
+  roles:
+    - nginx
