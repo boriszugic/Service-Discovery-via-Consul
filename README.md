@@ -32,3 +32,38 @@ The result: **when VMSS scales in or out, Nginx stops or starts proxying request
 - Terraform
 - Ansible
 - Load testing tool (e.g. wrk or ab)
+
+---  
+
+## How to Run
+
+1. Generate SSH keys for the VMs:
+```
+cd infra
+bash generate_keys.sh
+```
+
+2. Provision infrastructure with Terraform:
+```
+cd terraform
+terraform init
+terraform apply
+```
+
+3. Configure services with Ansible:
+```
+cd ../../ansible
+ansible-playbook -i inventory site.yaml
+```
+
+4. Trigger scaling by load testing Nginx until a new VM is added (e.g. with wrk or ab).
+
+5. Check Nginx config to confirm new backend nodes are registered automatically:
+```
+cat /etc/nginx/conf.d/upstreams.conf
+```
+
+---
+
+## Credits
+Part of the <a href="https://www.linkedin.com/build-relation/newsletter-follow?entityUrn=7315967826320588801" target="_blank">DevOps Starter Pack</a> series.
